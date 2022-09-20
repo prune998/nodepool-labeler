@@ -1,7 +1,13 @@
 componentConfig: true
-domain: nodepoolLabeler.lecentre.net
+domain: nodepoollabeler.lecentre.net
 layout:
 - go.kubebuilder.io/v4-alpha
 projectName: nodepool-labeler
 repo: github.com/prune998/nodepool-labeler
+resources:
+- controller: true
+  group: batch
+  kind: Labels
+  path: k8s.io/api/batch/v1
+  version: v1
 version: "3"
