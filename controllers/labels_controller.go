@@ -81,6 +81,7 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	//  stop here if the node is not one of ours
 	if node.Labels["cloud.google.com/gke-nodepool"] != "label-test-pool" {
 		log.Info("skipping node which is not ours")
+		log.Info("node", "data", node)
 		return ctrl.Result{}, nil
 	}
 
