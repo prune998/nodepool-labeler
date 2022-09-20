@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"regexp"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -78,16 +79,22 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// now we have the node data
 	// log.Info("node", "data", node)
 
+	// for now, skip all nodes based on name
+	if match, _ := regexp.MatchString("gke-wk-qa-us-central--label-test-pool.*", node.Name); !match {
+		return ctrl.Result{}, nil
+	}
+
+	log.Info("node", "data", node)
+
 	//  stop here if the node is not one of ours
 	if node.Labels["cloud.google.com/gke-nodepool"] != "label-test-pool" {
 		log.Info("skipping node which is not ours")
-		log.Info("node", "data", node)
 		return ctrl.Result{}, nil
 	}
 
 	// check if the node has a label telling that we already labeled it
 	if !nodeIsLabeled(node.Labels) {
-		log.Info("node does not have the right labels, they are going to be processed", "data", node.Name)
+		log.Info("node does not have the right labels, adding them", "data", node.Name)
 
 		// node is not labeled in k8s, which means it is not in GCP...
 
@@ -149,14 +156,16 @@ func NewNodePredicate() predicate.Predicate {
 		CreateFunc: func(e event.CreateEvent) bool {
 			// we are kipping this event so we reconcile all the nodes at start
 			// not sure we need it in fact... to be tested
-			return false
+			return true
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			// Generation is only updated when something changes in the spec
 			// If it's a metadata change, nothing changes, so it's what we want here
-			newGeneration := e.ObjectNew.GetGeneration()
-			oldGeneration := e.ObjectOld.GetGeneration()
-			return oldGeneration == newGeneration
+			// but generation only exist for CRDs, not for nodes, so we have to deal with all updates :/
+			// newGeneration := e.ObjectNew.GetGeneration()
+			// oldGeneration := e.ObjectOld.GetGeneration()
+			// return oldGeneration == newGeneration
+			return true
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			return false
