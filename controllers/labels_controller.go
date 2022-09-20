@@ -18,11 +18,9 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -81,7 +79,7 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// log.Info("node", "data", node)
 
 	//  stop here if the node is not one of ours
-	if  node.Labels["cloud.google.com/gke-nodepool"] != "label-test-pool" {
+	if node.Labels["cloud.google.com/gke-nodepool"] != "label-test-pool" {
 		log.Info("skipping node which is not ours")
 		return ctrl.Result{}, nil
 	}
@@ -99,8 +97,10 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 		patch := client.MergeFrom(node.DeepCopy())
 		node.Labels[labelKey] = labelValue
-		err := r.Patch(ctx, node, patch)
-
+		err := r.Patch(ctx, &node, patch)
+		if err != nil {
+			log.Error(err, "error patching the resource", node.Name)
+		}
 		// payload := []patchStringValue{{
 		// 	Op:    "replace",
 		// 	Path:  fmt.Sprintf("/metadata/labels/%s", labelKey),
@@ -108,20 +108,20 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		// }}
 		// payloadBytes, _ := json.Marshal(payload)
 
-	// 	toto := &client.Patch{
-	// 		Type: types.JSONPatchType,
-	// 		Data: payload,
-	// 	}
-	// 	if err := r.Patch(ctx, &node, &payload); err != nil {
-	// 		log.WithFields(log.Fields{
-	// 			"certmerge": instance.Name,
-	// 			"namespace": instance.Namespace,
-	// 		}).Errorf("Error updating Secret %s/%s - %v\n", secret.Namespace, secret.Name, err)
-	// 		return emptyRes, err
-	// 	}
-	// 	return emptyRes, nil
-	// }
-
+		// 	toto := &client.Patch{
+		// 		Type: types.JSONPatchType,
+		// 		Data: payload,
+		// 	}
+		// 	if err := r.Patch(ctx, &node, &payload); err != nil {
+		// 		log.WithFields(log.Fields{
+		// 			"certmerge": instance.Name,
+		// 			"namespace": instance.Namespace,
+		// 		}).Errorf("Error updating Secret %s/%s - %v\n", secret.Namespace, secret.Name, err)
+		// 		return emptyRes, err
+		// 	}
+		// 	return emptyRes, nil
+		// }
+	}
 	return ctrl.Result{}, nil
 }
 
