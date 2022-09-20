@@ -26,6 +26,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const (
+	labelKey   = "nodepool-labeler"
+	labelValue = "true"
+)
+
 // LabelsReconciler reconciles a Labels object
 type LabelsReconciler struct {
 	client.Client
@@ -51,15 +56,24 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	log := log.FromContext(ctx)
 
 	var node corev1.Node
-	log.Info("watchlist", "err", req.NamespacedName)
+	log.Info("watchlist", "data", req.NamespacedName)
 	if err := r.Get(ctx, req.NamespacedName, &node); err != nil {
 
-		log.Error(err, "unable to fetch node")
+		// log.Error(err, "unable to fetch node")
 		// we'll ignore not-found errors, since they can't be fixed by an immediate
 		// requeue (we'll need to wait for a new notification), and we can get them
 		// on deleted requests.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
+	// now we have the node data
+	// log.Info("node", "data", node)
+
+	// check if the node has a label telling that we already labeled it
+	if !nodeIsLabeled(node.Labels) {
+		log.Info("node does not have the right labels, they are going to be processed", "data", node)
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -68,4 +82,13 @@ func (r *LabelsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Node{}).
 		Complete(r)
+}
+
+func nodeIsLabeled(labels map[string]string) bool {
+	for key, val := range labels {
+		if key == labelKey && val == labelValue {
+			return true
+		}
+	}
+	return false
 }
