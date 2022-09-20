@@ -51,7 +51,9 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	log := log.FromContext(ctx)
 
 	var node corev1.Node
+	log.Info("watchlist", "err", req.NamespacedName)
 	if err := r.Get(ctx, req.NamespacedName, &node); err != nil {
+
 		log.Error(err, "unable to fetch node")
 		// we'll ignore not-found errors, since they can't be fixed by an immediate
 		// requeue (we'll need to wait for a new notification), and we can get them
