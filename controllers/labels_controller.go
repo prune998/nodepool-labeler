@@ -21,6 +21,7 @@ import (
 	"errors"
 	"regexp"
 
+	"google.golang.org/api/compute/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -39,13 +40,6 @@ const (
 type LabelsReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
-}
-
-// patchStringValue describes the k8s patch to update a resource
-type patchStringValue struct {
-	Op    string `json:"op"`
-	Path  string `json:"path"`
-	Value string `json:"value"`
 }
 
 //+kubebuilder:rbac:groups=batch,resources=labels,verbs=get;list;watch;create;update;patch;delete
@@ -105,13 +99,26 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		// node is not labeled in k8s, which means it is not in GCP...
 
 		// add labels in GCP
-		// TODO
+		labelsToAdd := make(map[string]string)
+		labelsList := []string{"service", "app", "team", "cloud.google.com/gke-nodepool"}
+
+		for _, labelKey := range labelsList {
+			if label, ok := node.Labels[labelKey]; ok {
+				labelsToAdd[labelKey] = label
+			} else {
+				labelsToAdd[labelKey] = "unknown"
+			}
+		}
+		err := addCloudNodeLabels(node.Name, node.Labels["topology.kubernetes.io/zone"], labelsToAdd)
+		if err != nil {
+			log.Error(err, "error adding labels to the CLOUD resource, retrying", node.Name, "labels", labelsToAdd)
+			return ctrl.Result{}, errors.New("error adding labels to the CLOUD resource")
+		}
 
 		// add labels in K8s
-
 		patch := client.MergeFrom(node.DeepCopy())
 		node.Labels[labelKey] = labelValue
-		err := r.Patch(ctx, &node, patch)
+		err = r.Patch(ctx, &node, patch)
 		if err != nil {
 			log.Error(err, "error patching the resource", node.Name)
 		}
@@ -157,4 +164,35 @@ func NewNodePredicate() predicate.Predicate {
 			return false
 		},
 	}
+}
+
+// AddCloudNodeLabels connect to GCE API and add labels to the instance
+func addCloudNodeLabels(instanceName, zone string, labels map[string]string) error {
+
+	// Set static values for now
+	projectID := "wk-quality-assurance"
+
+	ctx := context.Background()
+	service, err := compute.NewService(ctx)
+	if err != nil {
+		return err
+	}
+
+	// search for the instance
+	instance, err := service.Instances.Get(projectID, zone, instanceName).Do()
+	if err != nil {
+		return err
+	}
+
+	// compute labels
+	NewLabels := &compute.InstancesSetLabelsRequest{
+		LabelFingerprint: instance.LabelFingerprint,
+		Labels:           labels,
+	}
+	_, err = service.Instances.SetLabels(projectID, zone, instanceName, NewLabels).Do()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
