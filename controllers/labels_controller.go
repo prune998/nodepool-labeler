@@ -18,12 +18,16 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 const (
@@ -35,6 +39,13 @@ const (
 type LabelsReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+}
+
+// patchStringValue describes the k8s patch to update a resource
+type patchStringValue struct {
+	Op    string `json:"op"`
+	Path  string `json:"path"`
+	Value string `json:"value"`
 }
 
 //+kubebuilder:rbac:groups=batch,resources=labels,verbs=get;list;watch;create;update;patch;delete
@@ -56,7 +67,7 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	log := log.FromContext(ctx)
 
 	var node corev1.Node
-	log.Info("watchlist", "data", req.NamespacedName)
+	log.Info("reconciling", "data", req.NamespacedName)
 	if err := r.Get(ctx, req.NamespacedName, &node); err != nil {
 
 		// log.Error(err, "unable to fetch node")
@@ -69,10 +80,47 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// now we have the node data
 	// log.Info("node", "data", node)
 
+	//  stop here if the node is not one of ours
+	if  node.Labels["cloud.google.com/gke-nodepool"] != "label-test-pool" {
+		log.Info("skipping node which is not ours")
+		return ctrl.Result{}, nil
+	}
+
 	// check if the node has a label telling that we already labeled it
 	if !nodeIsLabeled(node.Labels) {
-		log.Info("node does not have the right labels, they are going to be processed", "data", node)
-	}
+		log.Info("node does not have the right labels, they are going to be processed", "data", node.Name)
+
+		// node is not labeled in k8s, which means it is not in GCP...
+
+		// add labels in GCP
+		// TODO
+
+		// add labels in K8s
+
+		patch := client.MergeFrom(node.DeepCopy())
+		node.Labels[labelKey] = labelValue
+		err := r.Patch(ctx, node, patch)
+
+		// payload := []patchStringValue{{
+		// 	Op:    "replace",
+		// 	Path:  fmt.Sprintf("/metadata/labels/%s", labelKey),
+		// 	Value: labelValue,
+		// }}
+		// payloadBytes, _ := json.Marshal(payload)
+
+	// 	toto := &client.Patch{
+	// 		Type: types.JSONPatchType,
+	// 		Data: payload,
+	// 	}
+	// 	if err := r.Patch(ctx, &node, &payload); err != nil {
+	// 		log.WithFields(log.Fields{
+	// 			"certmerge": instance.Name,
+	// 			"namespace": instance.Namespace,
+	// 		}).Errorf("Error updating Secret %s/%s - %v\n", secret.Namespace, secret.Name, err)
+	// 		return emptyRes, err
+	// 	}
+	// 	return emptyRes, nil
+	// }
 
 	return ctrl.Result{}, nil
 }
@@ -81,6 +129,7 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 func (r *LabelsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Node{}).
+		WithEventFilter(NewNodePredicate()).
 		Complete(r)
 }
 
@@ -91,4 +140,19 @@ func nodeIsLabeled(labels map[string]string) bool {
 		}
 	}
 	return false
+}
+
+// NewNodePredicate this predicate will only match on Create events as we don't care when nodes are updated or removed
+func NewNodePredicate() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			return true
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return false
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return false
+		},
+	}
 }
