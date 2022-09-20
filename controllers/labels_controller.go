@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"regexp"
 
 	corev1 "k8s.io/api/core/v1"
@@ -66,7 +67,7 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	log := log.FromContext(ctx)
 
 	var node corev1.Node
-	log.Info("reconciling", "data", req.NamespacedName)
+	// log.Info("reconciling", "data", req.NamespacedName)
 	if err := r.Get(ctx, req.NamespacedName, &node); err != nil {
 
 		// log.Error(err, "unable to fetch node")
@@ -84,7 +85,12 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, nil
 	}
 
-	log.Info("node", "data", node)
+	// log.Info("node", "data", node)
+
+	// if the "cloud.google.com/gke-nodepool" label is not set, re-queue the node
+	if _, ok := node.Labels["cloud.google.com/gke-nodepool"]; !ok {
+		return ctrl.Result{}, errors.New("node does not have a 'cloud.google.com/gke-nodepool' label set, re-conciling")
+	}
 
 	//  stop here if the node is not one of ours
 	if node.Labels["cloud.google.com/gke-nodepool"] != "label-test-pool" {
@@ -109,26 +115,6 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err != nil {
 			log.Error(err, "error patching the resource", node.Name)
 		}
-		// payload := []patchStringValue{{
-		// 	Op:    "replace",
-		// 	Path:  fmt.Sprintf("/metadata/labels/%s", labelKey),
-		// 	Value: labelValue,
-		// }}
-		// payloadBytes, _ := json.Marshal(payload)
-
-		// 	toto := &client.Patch{
-		// 		Type: types.JSONPatchType,
-		// 		Data: payload,
-		// 	}
-		// 	if err := r.Patch(ctx, &node, &payload); err != nil {
-		// 		log.WithFields(log.Fields{
-		// 			"certmerge": instance.Name,
-		// 			"namespace": instance.Namespace,
-		// 		}).Errorf("Error updating Secret %s/%s - %v\n", secret.Namespace, secret.Name, err)
-		// 		return emptyRes, err
-		// 	}
-		// 	return emptyRes, nil
-		// }
 	}
 	return ctrl.Result{}, nil
 }
@@ -165,7 +151,7 @@ func NewNodePredicate() predicate.Predicate {
 			// newGeneration := e.ObjectNew.GetGeneration()
 			// oldGeneration := e.ObjectOld.GetGeneration()
 			// return oldGeneration == newGeneration
-			return true
+			return false
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			return false
