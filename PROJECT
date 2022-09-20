@@ -1,0 +1,7 @@
+componentConfig: true
+domain: nodepoolLabeler.lecentre.net
+layout:
+- go.kubebuilder.io/v4-alpha
+projectName: nodepool-labeler
+repo: github.com/prune998/nodepool-labeler
+version: "3"
