@@ -147,10 +147,16 @@ func nodeIsLabeled(labels map[string]string) bool {
 func NewNodePredicate() predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			return true
+			// we are kipping this event so we reconcile all the nodes at start
+			// not sure we need it in fact... to be tested
+			return false
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			return false
+			// Generation is only updated when something changes in the spec
+			// If it's a metadata change, nothing changes, so it's what we want here
+			newGeneration := e.ObjectNew.GetGeneration()
+			oldGeneration := e.ObjectOld.GetGeneration()
+			return oldGeneration == newGeneration
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			return false
