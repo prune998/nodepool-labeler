@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	labelKey   = "nodepool-labeler"
+	labelKey   = "k8s-nodepool-labeler"
 	labelValue = "true"
 )
 
