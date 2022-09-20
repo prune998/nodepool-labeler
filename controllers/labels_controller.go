@@ -96,8 +96,6 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if !nodeIsLabeled(node.Labels) {
 		log.Info("node does not have the right labels, adding them", "data", node.Name)
 
-		// node is not labeled in k8s, which means it is not in GCP...
-
 		// add labels in GCP
 		labelsToAdd := make(map[string]string)
 		labelsList := []string{"service", "app", "team", "cloud.google.com/gke-nodepool"}
@@ -111,7 +109,7 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 		err := addCloudNodeLabels(node.Name, node.Labels["topology.kubernetes.io/zone"], labelsToAdd)
 		if err != nil {
-			log.Error(err, "error adding labels to the CLOUD resource, retrying", node.Name, "labels", labelsToAdd)
+			log.Error(err, "error adding labels to the CLOUD resource, retrying", "node", node.Name, "labels", labelsToAdd)
 			return ctrl.Result{}, errors.New("error adding labels to the CLOUD resource")
 		}
 
