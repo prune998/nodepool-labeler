@@ -21,6 +21,7 @@ import (
 	"errors"
 	"regexp"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/api/compute/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -28,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
@@ -40,6 +42,32 @@ const (
 type LabelsReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+}
+
+var (
+	totalNodes = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "node_total",
+			Help: "Number of node proccessed",
+		},
+	)
+	labeledNodes = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "node_labeled",
+			Help: "Number of node that had labels added",
+		},
+	)
+	totalFailures = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "label_failure_total",
+			Help: "Number of falures while labeling nodes",
+		},
+	)
+)
+
+func init() {
+	// Register custom metrics with the global prometheus registry
+	metrics.Registry.MustRegister(totalNodes, labeledNodes, totalFailures)
 }
 
 //+kubebuilder:rbac:groups=batch,resources=labels,verbs=get;list;watch;create;update;patch;delete
@@ -81,6 +109,9 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// log.Info("node", "data", node)
 
+	// inc total count of managed nodes
+	totalNodes.Inc()
+
 	// if the "cloud.google.com/gke-nodepool" label is not set, re-queue the node
 	if _, ok := node.Labels["cloud.google.com/gke-nodepool"]; !ok {
 		return ctrl.Result{}, errors.New("node does not have a 'cloud.google.com/gke-nodepool' label set, re-conciling")
@@ -117,6 +148,7 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		err := addCloudNodeLabels(node.Name, node.Labels["topology.kubernetes.io/zone"], labelsToAdd)
 		if err != nil {
 			log.Error(err, "error adding labels to the CLOUD resource, retrying", "node", node.Name, "labels", labelsToAdd)
+			totalFailures.Inc()
 			return ctrl.Result{}, errors.New("error adding labels to the CLOUD resource")
 		}
 
@@ -125,8 +157,11 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		node.Labels[labelKey] = labelValue
 		err = r.Patch(ctx, &node, patch)
 		if err != nil {
-			log.Error(err, "error patching the resource", node.Name)
+			log.Error(err, "error patching K8s Node labels, retrying", "node", node.Name)
+			totalFailures.Inc()
+			return ctrl.Result{}, errors.New("error adding labels to the K8s resource")
 		}
+		labeledNodes.Inc()
 	}
 	return ctrl.Result{}, nil
 }

@@ -1,6 +1,13 @@
 # nodepool-labeler
 K8s operator to label Cloud Instances based on NodePool labels
 
+## Architecture
+
+This operator is pretty simple.
+It monitors the `creation` events for `Nodes`. When a new node is added, it wait (reconcile loop) for the `nodePool` label to be added.
+Then, it connect to GCE API and copy a list of Kubernetes labels from the K8s Node to the GCE Instance.
+Finally, it adds a label to the K8s Node so we can track that this node was correctly labeled in GCE.
+
 
 ## Creation of the Controler
 

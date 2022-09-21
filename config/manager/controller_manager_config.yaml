@@ -27,3 +27,11 @@ leaderElection:
 # if you are doing or is intended to do any operation such as perform cleanups
 # after the manager stops then its usage might be unsafe.
 # leaderElectionReleaseOnCancel: true
+gcp:
+  project: wk-quality-assurance
+  labelsList:
+    service:                      service
+    app:                          app
+    team:                         team
+    owner:                        owner
+    loud.google.com/gke-nodepool: nodepool
