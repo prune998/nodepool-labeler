@@ -108,10 +108,10 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 
 		for labelKey, labelValue := range labelsList {
-			if _, ok := node.Labels[labelKey]; ok {
-				labelsToAdd[labelKey] = labelValue
+			if val, ok := node.Labels[labelKey]; ok {
+				labelsToAdd[labelValue] = val
 			} else {
-				labelsToAdd[labelKey] = "unknown"
+				labelsToAdd[labelValue] = "unknown"
 			}
 		}
 		err := addCloudNodeLabels(node.Name, node.Labels["topology.kubernetes.io/zone"], labelsToAdd)
