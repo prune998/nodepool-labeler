@@ -190,6 +190,11 @@ func addCloudNodeLabels(instanceName, zone string, labels map[string]string) err
 	}
 
 	// compute labels
+	// merge original labels with new ones - old instance labels always win just in case
+	for k, v := range instance.Labels {
+		labels[k] = v
+	}
+
 	NewLabels := &compute.InstancesSetLabelsRequest{
 		LabelFingerprint: instance.LabelFingerprint,
 		Labels:           labels,
