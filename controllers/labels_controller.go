@@ -98,11 +98,18 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 		// add labels in GCP
 		labelsToAdd := make(map[string]string)
-		labelsList := []string{"service", "app", "team", "cloud.google.com/gke-nodepool"}
 
-		for _, labelKey := range labelsList {
-			if label, ok := node.Labels[labelKey]; ok {
-				labelsToAdd[labelKey] = label
+		// this is a map of k8s labels -> GCP labels (a-z-_ only)
+		labelsList := map[string]string{
+			"service":                       "service",
+			"app":                           "app",
+			"team":                          "team",
+			"cloud.google.com/gke-nodepool": "nodepool",
+		}
+
+		for labelKey, labelValue := range labelsList {
+			if _, ok := node.Labels[labelKey]; ok {
+				labelsToAdd[labelKey] = labelValue
 			} else {
 				labelsToAdd[labelKey] = "unknown"
 			}
