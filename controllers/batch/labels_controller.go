@@ -88,8 +88,8 @@ func init() {
 func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
+	// node will hold the current node that triggered the reconcile
 	var node corev1.Node
-	// log.Info("reconciling", "data", req.NamespacedName)
 	if err := r.Get(ctx, req.NamespacedName, &node); err != nil {
 
 		// log.Error(err, "unable to fetch node")
@@ -99,20 +99,17 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// now we have the node data
-	// log.Info("node", "data", node)
-
 	// for now, skip all nodes based on name
+	// this is just for the demo, then we'll remove this to watch all nodes
 	if match, _ := regexp.MatchString("gke-wk-qa-us-central--label-test-pool.*", node.Name); !match {
 		return ctrl.Result{}, nil
 	}
 
-	// log.Info("node", "data", node)
-
-	// inc total count of managed nodes
+	// inc total count of processed nodes
 	totalNodes.Inc()
 
 	// if the "cloud.google.com/gke-nodepool" label is not set, re-queue the node
+	// Nodes seems to join the cluster before they are labeled (by the node-autoscaler ?)
 	if _, ok := node.Labels["cloud.google.com/gke-nodepool"]; !ok {
 		return ctrl.Result{}, errors.New("node does not have a 'cloud.google.com/gke-nodepool' label set, re-conciling")
 	}
