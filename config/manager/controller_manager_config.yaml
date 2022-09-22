@@ -1,5 +1,3 @@
-apiVersion: config.tutorial.kubebuilder.io/v2
-kind: ProjectConfig
 health:
   healthProbeBindAddress: :8081
 metrics:
@@ -8,7 +6,7 @@ webhook:
   port: 9443
 leaderElection:
   leaderElect: true
-  resourceName: 80807133.tutorial.kubebuilder.io
+  resourceName: 2859e67b.nodepoollabeler.lecentre.net
 # projectID is the name of the GCP project
 projectID: wk-quality-assurance
 # labels is a map of Kubernetes label -> GCP label
