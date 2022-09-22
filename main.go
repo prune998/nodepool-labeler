@@ -17,8 +17,10 @@ limitations under the License.
 package main
 
 import (
+	"errors"
 	"flag"
 	"os"
+	"regexp"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -75,6 +77,14 @@ func main() {
 		}
 	}
 
+	// validate the format of the supplied GCE label keys
+	r, _ := regexp.Compile("(^[a-z][a-z0-9_-]{1,62}$)")
+	for _, GCEKey := range ctrlConfig.Labels {
+		if !r.MatchString(GCEKey) {
+			setupLog.Error(errors.New("supplied GCE Label Keys is malformed"), "GCE Label Keys must only contains [a-z0-9_-] and start with a lowercase", "key", GCEKey)
+			os.Exit(1)
+		}
+	}
 	// fmt.Println(ctrlConfig.ProjectID)
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {

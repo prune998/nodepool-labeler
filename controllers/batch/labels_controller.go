@@ -124,7 +124,7 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// check if the node has a label telling that we already labeled it
 	if !nodeIsLabeled(node.Labels) {
-		log.Info("node does not have the right labels, adding them", "data", node.Name)
+		log.Info("node was never processed for labels, working on it")
 
 		// labelsToAdd is the list of labels to add to the GCP instance
 		// it is a map of k8s labels -> GCP labels (a-z-_ only)
@@ -132,7 +132,9 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		labelsToAdd := make(map[string]string)
 		for labelKey, labelValue := range r.Config.Labels {
 			if val, ok := node.Labels[labelKey]; ok {
-				labelsToAdd[labelValue] = val
+				if validateLabelFormat(val) {
+					labelsToAdd[labelValue] = val
+				}
 			} else {
 				labelsToAdd[labelValue] = "unknown"
 			}
@@ -221,14 +223,33 @@ func addCloudNodeLabels(instanceName, project, zone string, labels map[string]st
 		labels[k] = v
 	}
 
+	// Ensure we're not over the 64 max labels
+	if len(labels) > 64 {
+		// this is a silent return BUT we need to return a specific error that will be logged
+		// we don't want to trigger a reconsile (else we'll loop reconcile forever)
+		return nil
+	}
+
 	NewLabels := &compute.InstancesSetLabelsRequest{
 		LabelFingerprint: instance.LabelFingerprint,
 		Labels:           labels,
 	}
+
 	_, err = service.Instances.SetLabels(project, zone, instanceName, NewLabels).Do()
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func validateLabelFormat(value string) bool {
+	// Validate the labels
+	// maximum of 64 labels
+	// Keys have a minimum length of 1 character and a maximum length of 63
+	// Value have maximum length of 63 characters.
+	// Keys and values can contain only lowercase letters, numeric characters, underscores, and dashes
+	// Keys must start with a lowercase letter or international character.
+	r, _ := regexp.Compile("(^[a-z][a-z0-9_-]{1,62}$)")
+	return r.MatchString(value)
 }
