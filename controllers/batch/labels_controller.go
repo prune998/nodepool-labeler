@@ -199,7 +199,8 @@ func nodeIsLabeled(labels map[string]string) bool {
 func NewNodePredicate() predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			// reconcile all the nodes at start
+			// reconcile all the nodes at start of the operator
+			// then only the new nodes that are added
 			return true
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
@@ -209,10 +210,7 @@ func NewNodePredicate() predicate.Predicate {
 			// newGeneration := e.ObjectNew.GetGeneration()
 			// oldGeneration := e.ObjectOld.GetGeneration()
 			// return oldGeneration == newGeneration
-
-			// here we also reconcile on any node change
-			// and expect the logic of reconcile to not hammer the GCE API
-			return true
+			return false
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			return false
