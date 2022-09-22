@@ -30,7 +30,8 @@ type ProjectConfig struct {
 	// ControllerManagerConfigurationSpec returns the contfigurations for controllers
 	cfg.ControllerManagerConfigurationSpec `json:",inline"`
 
-	ProjectID string `json:"projectID,omitempty"`
+	ProjectID string            `json:"projectID,omitempty"`
+	Labels    map[string]string `json:"labels,omitempty"`
 }
 
 func init() {

@@ -22,6 +22,7 @@ import (
 	"regexp"
 
 	"github.com/prometheus/client_golang/prometheus"
+	configv2 "github.com/prune998/nodepool-labeler/apis/config/v2"
 	"google.golang.org/api/compute/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -42,6 +43,7 @@ const (
 type LabelsReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	Config configv2.ProjectConfig
 }
 
 var (
@@ -124,32 +126,27 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if !nodeIsLabeled(node.Labels) {
 		log.Info("node does not have the right labels, adding them", "data", node.Name)
 
-		// add labels in GCP
+		// labelsToAdd is the list of labels to add to the GCP instance
+		// it is a map of k8s labels -> GCP labels (a-z-_ only)
+		// each label to copy is added to this list
 		labelsToAdd := make(map[string]string)
-
-		// this is a map of k8s labels -> GCP labels (a-z-_ only)
-		labelsList := map[string]string{
-			"service":                       "service",
-			"app":                           "app",
-			"team":                          "team",
-			"cloud.google.com/gke-nodepool": "nodepool",
-		}
-
-		for labelKey, labelValue := range labelsList {
+		for labelKey, labelValue := range r.Config.Labels {
 			if val, ok := node.Labels[labelKey]; ok {
 				labelsToAdd[labelValue] = val
 			} else {
 				labelsToAdd[labelValue] = "unknown"
 			}
 		}
-		err := addCloudNodeLabels(node.Name, node.Labels["topology.kubernetes.io/zone"], labelsToAdd)
+
+		// label the GCP Instance
+		err := addCloudNodeLabels(node.Name, r.Config.ProjectID, node.Labels["topology.kubernetes.io/zone"], labelsToAdd)
 		if err != nil {
 			log.Error(err, "error adding labels to the CLOUD resource, retrying", "node", node.Name, "labels", labelsToAdd)
 			totalFailures.Inc()
 			return ctrl.Result{}, errors.New("error adding labels to the CLOUD resource")
 		}
 
-		// add labels in K8s
+		// add the status labels in K8s node
 		patch := client.MergeFrom(node.DeepCopy())
 		node.Labels[labelKey] = labelValue
 		err = r.Patch(ctx, &node, patch)
@@ -204,10 +201,7 @@ func NewNodePredicate() predicate.Predicate {
 }
 
 // AddCloudNodeLabels connect to GCE API and add labels to the instance
-func addCloudNodeLabels(instanceName, zone string, labels map[string]string) error {
-
-	// Set static values for now
-	projectID := "wk-quality-assurance"
+func addCloudNodeLabels(instanceName, project, zone string, labels map[string]string) error {
 
 	ctx := context.Background()
 	service, err := compute.NewService(ctx)
@@ -216,7 +210,7 @@ func addCloudNodeLabels(instanceName, zone string, labels map[string]string) err
 	}
 
 	// search for the instance
-	instance, err := service.Instances.Get(projectID, zone, instanceName).Do()
+	instance, err := service.Instances.Get(project, zone, instanceName).Do()
 	if err != nil {
 		return err
 	}
@@ -231,7 +225,7 @@ func addCloudNodeLabels(instanceName, zone string, labels map[string]string) err
 		LabelFingerprint: instance.LabelFingerprint,
 		Labels:           labels,
 	}
-	_, err = service.Instances.SetLabels(projectID, zone, instanceName, NewLabels).Do()
+	_, err = service.Instances.SetLabels(project, zone, instanceName, NewLabels).Do()
 	if err != nil {
 		return err
 	}
