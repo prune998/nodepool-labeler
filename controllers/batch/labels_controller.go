@@ -120,10 +120,10 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	//  stop here if the node is not one of ours
 	// this is goging to be removed when the operator is ready to handle all the nodes of the cluster = prod ready
-	if node.Labels["cloud.google.com/gke-nodepool"] != "label-test-pool" {
-		log.Info("skipping node which is not ours")
-		return ctrl.Result{}, nil
-	}
+	// if node.Labels["cloud.google.com/gke-nodepool"] != "label-test-pool" {
+	// 	log.Info("skipping node which is not ours")
+	// 	return ctrl.Result{}, nil
+	// }
 
 	// labelsToAdd is the list of labels to add to the GCP instance
 	// it is a map of k8s labels -> GCP labels (a-z-_ only)
