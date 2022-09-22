@@ -20,7 +20,9 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"strconv"
 
+	"github.com/mitchellh/hashstructure/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	configv2 "github.com/prune998/nodepool-labeler/apis/config/v2"
 	"google.golang.org/api/compute/v1"
@@ -117,48 +119,62 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	//  stop here if the node is not one of ours
+	// this is goging to be removed when the operator is ready to handle all the nodes of the cluster = prod ready
 	if node.Labels["cloud.google.com/gke-nodepool"] != "label-test-pool" {
 		log.Info("skipping node which is not ours")
 		return ctrl.Result{}, nil
 	}
 
-	// check if the node has a label telling that we already labeled it
-	if !nodeIsLabeled(node.Labels) {
-		log.Info("node was never processed for labels, working on it")
-
-		// labelsToAdd is the list of labels to add to the GCP instance
-		// it is a map of k8s labels -> GCP labels (a-z-_ only)
-		// each label to copy is added to this list
-		labelsToAdd := make(map[string]string)
-		for labelKey, labelValue := range r.Config.Labels {
-			if val, ok := node.Labels[labelKey]; ok {
-				if validateLabelFormat(val) {
-					labelsToAdd[labelValue] = val
-				}
-			} else {
-				labelsToAdd[labelValue] = "unknown"
+	// labelsToAdd is the list of labels to add to the GCP instance
+	// it is a map of k8s labels -> GCP labels (a-z-_ only)
+	// each label to copy is added to this list
+	labelsToAdd := make(map[string]string)
+	for labelKey, labelValue := range r.Config.Labels {
+		if val, ok := node.Labels[labelKey]; ok {
+			if validateLabelFormat(val) {
+				labelsToAdd[labelValue] = val
 			}
+		} else {
+			labelsToAdd[labelValue] = "unknown"
 		}
-
-		// label the GCP Instance
-		err := addCloudNodeLabels(node.Name, r.Config.ProjectID, node.Labels["topology.kubernetes.io/zone"], labelsToAdd)
-		if err != nil {
-			log.Error(err, "error adding labels to the CLOUD resource, retrying", "node", node.Name, "labels", labelsToAdd)
-			totalFailures.Inc()
-			return ctrl.Result{}, errors.New("error adding labels to the CLOUD resource")
-		}
-
-		// add the status labels in K8s node
-		patch := client.MergeFrom(node.DeepCopy())
-		node.Labels[labelKey] = labelValue
-		err = r.Patch(ctx, &node, patch)
-		if err != nil {
-			log.Error(err, "error patching K8s Node labels, retrying", "node", node.Name)
-			totalFailures.Inc()
-			return ctrl.Result{}, errors.New("error adding labels to the K8s resource")
-		}
-		labeledNodes.Inc()
 	}
+
+	// if node is labeled, compute checksum to see if we need to re-apply
+
+	hash, err := hashstructure.Hash(labelsToAdd, hashstructure.FormatV2, nil)
+	if err != nil {
+		log.Error(err, "unable to compute the Labels hash")
+	}
+	stringHash := strconv.FormatUint(hash, 10)
+
+	// if hash is the same, skip re-labelling
+	if nodeIsLabeled(node.Labels) && stringHash == node.Labels[labelKey] {
+		log.Info("node is already labeled and labels are the same, skipping", "hash", hash)
+		return ctrl.Result{}, nil
+	}
+
+	// check if the node has a label telling that we already labeled it
+	log.Info("node was never processed for labels or labels differs, working on it...")
+
+	// label the GCP Instance
+	err = addCloudNodeLabels(node.Name, r.Config.ProjectID, node.Labels["topology.kubernetes.io/zone"], labelsToAdd)
+	if err != nil {
+		log.Error(err, "error adding labels to the CLOUD resource, retrying", "node", node.Name, "labels", labelsToAdd)
+		totalFailures.Inc()
+		return ctrl.Result{}, errors.New("error adding labels to the CLOUD resource")
+	}
+
+	// add the status labels in K8s node
+	patch := client.MergeFrom(node.DeepCopy())
+	node.Labels[labelKey] = stringHash
+	err = r.Patch(ctx, &node, patch)
+	if err != nil {
+		log.Error(err, "error patching K8s Node labels, retrying", "node", node.Name)
+		totalFailures.Inc()
+		return ctrl.Result{}, errors.New("error adding labels to the K8s resource")
+	}
+	labeledNodes.Inc()
+
 	return ctrl.Result{}, nil
 }
 
@@ -172,7 +188,7 @@ func (r *LabelsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func nodeIsLabeled(labels map[string]string) bool {
 	for key, val := range labels {
-		if key == labelKey && val == labelValue {
+		if key == labelKey && val != "" {
 			return true
 		}
 	}
@@ -183,8 +199,7 @@ func nodeIsLabeled(labels map[string]string) bool {
 func NewNodePredicate() predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			// we are kipping this event so we reconcile all the nodes at start
-			// not sure we need it in fact... to be tested
+			// reconcile all the nodes at start
 			return true
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
@@ -194,7 +209,10 @@ func NewNodePredicate() predicate.Predicate {
 			// newGeneration := e.ObjectNew.GetGeneration()
 			// oldGeneration := e.ObjectOld.GetGeneration()
 			// return oldGeneration == newGeneration
-			return false
+
+			// here we also reconcile on any node change
+			// and expect the logic of reconcile to not hammer the GCE API
+			return true
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			return false

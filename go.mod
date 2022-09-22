@@ -3,6 +3,7 @@ module github.com/prune998/nodepool-labeler
 go 1.19
 
 require (
+	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/onsi/ginkgo/v2 v2.1.4
 	github.com/onsi/gomega v1.19.0
 	github.com/prometheus/client_golang v1.12.2
