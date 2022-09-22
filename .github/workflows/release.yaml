@@ -23,7 +23,7 @@ jobs:
           go-version: '~1.19'
       - name: Test and build image
         run: |
-          make test docker-build
+          make test
 
   dev:
     needs: test
