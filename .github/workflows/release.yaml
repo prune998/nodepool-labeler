@@ -56,7 +56,6 @@ jobs:
             prune/nodepool-labeler:${{ github.sha }}
 
   publish:
-    needs: dev
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
