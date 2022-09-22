@@ -105,9 +105,9 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// for now, skip all nodes based on name
 	// this is just for the demo, then we'll remove this to watch all nodes
-	if match, _ := regexp.MatchString("gke-wk-qa-us-central--label-test-pool.*", node.Name); !match {
-		return ctrl.Result{}, nil
-	}
+	// if match, _ := regexp.MatchString("gke-wk-qa-us-central--label-test-pool.*", node.Name); !match {
+	// 	return ctrl.Result{}, nil
+	// }
 
 	// inc total count of processed nodes
 	totalNodes.Inc()
@@ -154,7 +154,7 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// check if the node has a label telling that we already labeled it
-	log.Info("node was never processed for labels or labels differs, working on it...")
+	log.Info("node was never processed for labels or labels differs, working on it...", "labels", labelsToAdd)
 
 	// label the GCP Instance
 	err = addCloudNodeLabels(node.Name, r.Config.ProjectID, node.Labels["topology.kubernetes.io/zone"], labelsToAdd)

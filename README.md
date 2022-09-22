@@ -25,6 +25,12 @@ owner:                         owner
 cloud.google.com/gke-nodepool: nodepool
 ```
 
+Note that if a Label already exist on the GCE Instance, **it will not be updated**. This can lead to out-of-sync labels between the two, but it is a security
+to prevent k8s users to temper the Instance workflow.
+Because of this behaviour, **updating** a K8s label value **will not be propagated** into the Instance labels. 
+
+Again, this operator is here to sync the K8s labels into the GCE Instance **when it is first created** and is not a real two-way sync. 
+
 ## Creation of the Controler
 
 ```bash
