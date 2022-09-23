@@ -18,9 +18,9 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/prometheus/client_golang/prometheus"
@@ -37,8 +37,8 @@ import (
 )
 
 const (
-	labelKey   = "k8s-nodepool-labeler"
-	labelValue = "true"
+	hashLabelKey    = "k8s-nodepool-labeler" // Label added to the K8s node once it is processed
+	RequeueWaitTime = 5 * time.Second        // Wait for 5s when the node is not ready to be processed
 )
 
 // LabelsReconciler reconciles a Labels object
@@ -115,7 +115,8 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// if the "cloud.google.com/gke-nodepool" label is not set, re-queue the node
 	// Nodes seems to join the cluster before they are labeled (by the node-autoscaler ?)
 	if _, ok := node.Labels["cloud.google.com/gke-nodepool"]; !ok {
-		return ctrl.Result{}, errors.New("node does not have a 'cloud.google.com/gke-nodepool' label set, re-conciling")
+		log.Info("node does not have a 'cloud.google.com/gke-nodepool' label set, re-queueing the node for next reconcile")
+		return ctrl.Result{Requeue: true, RequeueAfter: RequeueWaitTime}, nil
 	}
 
 	//  stop here if the node is not one of ours
@@ -148,7 +149,7 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	stringHash := strconv.FormatUint(hash, 10)
 
 	// if hash is the same, skip re-labelling
-	if nodeIsLabeled(node.Labels) && stringHash == node.Labels[labelKey] {
+	if nodeIsLabeled(node.Labels, stringHash) {
 		log.Info("node is already labeled and labels are the same, skipping", "hash", hash)
 		return ctrl.Result{}, nil
 	}
@@ -161,17 +162,17 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if err != nil {
 		log.Error(err, "error adding labels to the CLOUD resource, retrying", "node", node.Name, "labels", labelsToAdd)
 		totalFailures.Inc()
-		return ctrl.Result{}, errors.New("error adding labels to the CLOUD resource")
+		return ctrl.Result{Requeue: true, RequeueAfter: RequeueWaitTime}, nil
 	}
 
 	// add the status labels in K8s node
 	patch := client.MergeFrom(node.DeepCopy())
-	node.Labels[labelKey] = stringHash
+	node.Labels[hashLabelKey] = stringHash
 	err = r.Patch(ctx, &node, patch)
 	if err != nil {
 		log.Error(err, "error patching K8s Node labels, retrying", "node", node.Name)
 		totalFailures.Inc()
-		return ctrl.Result{}, errors.New("error adding labels to the K8s resource")
+		return ctrl.Result{Requeue: true, RequeueAfter: RequeueWaitTime}, nil
 	}
 	labeledNodes.Inc()
 
@@ -186,12 +187,12 @@ func (r *LabelsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func nodeIsLabeled(labels map[string]string) bool {
-	for key, val := range labels {
-		if key == labelKey && val != "" {
-			return true
-		}
+// nodeIsLabeled return true when the node already have the label and the value is not empty
+func nodeIsLabeled(labels map[string]string, hash string) bool {
+	if val, ok := labels[hashLabelKey]; ok && val == hash {
+		return true
 	}
+
 	return false
 }
 
