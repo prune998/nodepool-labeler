@@ -150,7 +150,7 @@ func (r *LabelsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// if hash is the same, skip re-labelling
 	if nodeIsLabeled(node.Labels, stringHash) {
-		log.Info("node is already labeled and labels are the same, skipping", "hash", hash)
+		log.Info("node is already labeled and labels are the same, skipping", "hash", hash, "labels", labelsToAdd)
 		return ctrl.Result{}, nil
 	}
 
